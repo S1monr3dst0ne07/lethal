@@ -1,0 +1,63 @@
+
+
+fn outchar(ptr)
+{
+    syscall(1, 1, ptr, 1);
+}
+fn hex(x)
+{
+    outchar("0");
+    outchar("x");
+    
+    table      = "0123456789abcdef";
+    table_mask = 15;
+
+    offset = 64;
+    or = 0;
+
+    lab loop;
+        offset = offset - 4;
+        digit = (x >> offset) & table_mask;
+        or = or | digit;
+
+        jump zero_skip ~ or == 0;
+            outchar(table + digit);
+        lab zero_skip;
+    jump loop ~ offset;
+
+    outchar("\n");
+}
+
+
+
+struct entires[100]
+{
+    number
+}
+
+fn compute_entry(index)
+{
+    entires[index]number = 
+        entires[index - 1]number +
+        entires[index - 2]number ;
+}
+
+fn compute_all()
+{
+    entires[0]number = 1;
+    entires[1]number = 1;
+
+    index = 2;
+    lab loop;
+        compute_entry(index);
+
+        hex(index);
+        index = index + 1;
+    jump loop ~ index < 1000;
+}
+
+fn main()
+{
+    compute_all();
+}
+
