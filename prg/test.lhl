@@ -1,34 +1,5 @@
 
-
-fn outchar(ptr)
-{
-    syscall(1, 1, ptr, 1);
-}
-fn hex(x)
-{
-    outchar("0");
-    outchar("x");
-    
-    table      = "0123456789abcdef";
-    table_mask = 15;
-
-    offset = 64;
-    or = 0;
-
-    lab loop;
-        offset = offset - 4;
-        digit = (x >> offset) & table_mask;
-        or = or | digit;
-
-        jump zero_skip ~ or == 0;
-            outchar(table + digit);
-        lab zero_skip;
-    jump loop ~ offset;
-
-    outchar("\n");
-}
-
-
+use "lib/debug.lhl"
 
 struct entires[100]
 {
@@ -51,13 +22,15 @@ fn compute_all()
     lab loop;
         compute_entry(index);
 
-        hex(index);
+        printh(index);
         index = index + 1;
     jump loop ~ index < 1000;
 }
 
 fn main()
 {
-    compute_all();
+    //compute_all();
+
+    printd(4096);
 }
 

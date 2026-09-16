@@ -1,0 +1,60 @@
+
+// core debugging library !!!
+// low-level stuff ahead
+
+
+fn outchar(ptr)
+{
+    syscall(1, 1, ptr, 1);
+}
+
+fn printh(number)
+{
+    outchar("0");
+    outchar("x");
+    
+    table      = "0123456789abcdef";
+    table_mask = 15;
+
+    offset = 64;
+    or = 0;
+
+    lab loop;
+        offset = offset - 4;
+        digit = (number >> offset) & table_mask;
+        or = or | digit;
+
+        jump zero_skip ~ or == 0;
+            outchar(table + digit);
+        lab zero_skip;
+    jump loop ~ offset;
+
+    outchar("\n");
+}
+
+fn printd(number)
+    // THIS CODE IS HORRIBLY HORRIBLY SLOW,
+    // DON'T USE IT!!!!!!
+{
+    table = "0123456789";
+
+    // 1 << 64 = 18446744073709551616
+    slider     = 10000000000000000000;
+    or = 0;
+
+    lab loop;
+        digit = number / slider;
+        number = number - (digit * slider);
+
+        or = or | digit;
+        slider = slider / 10;
+
+        jump zero_skip ~ or == 0;
+            outchar(table + digit);
+        lab zero_skip;
+    jump loop ~ slider;
+
+    outchar("\n");
+    
+}
+
