@@ -40,7 +40,7 @@ inline long syscall(long int kind,  ...)
 }
 
 
-void simple_mmap(void* addr, size_t length)
+void map(void* addr, size_t length)
 {
     syscall(SYS_mmap, 
         addr, 
@@ -55,18 +55,23 @@ void simple_mmap(void* addr, size_t length)
 void handler(int sig, siginfo_t *info, void *ucontext);
 void register_handler()
 {
-    register uint64_t r10 __asm__("r10") = sizeof(sigset_t);
-
-    struct sigaction sigact = {
-        .sa_sigaction = handler,
-        .sa_flags     = SA_SIGINFO,
+    struct {
+        void (*handler)(int sig, siginfo_t *info, void *ucontext);;
+        unsigned long flags;
+        void (*restorer)(void);
+        unsigned long mask;
+    } sigact = {
+        .handler  = handler,
+        .flags    = SA_SIGINFO,
+        .mask     = 0,
+        .restorer = NULL
     };
 
     syscall(SYS_rt_sigaction,
         SIGSEGV,
         &sigact,
         NULL,
-        sizeof(sigset_t),
+        sizeof(sigact.mask),
         (uint64_t)0, (uint64_t)0
     );
 
@@ -91,7 +96,7 @@ void runtime_init()
     entry_t* ptr = struct_table;
     while (ptr->vaddr)
     {
-        simple_mmap(ptr->vaddr, ptr->outer_size);
+        map(ptr->vaddr, ptr->outer_size);
         ptr++;
     }
 }
