@@ -107,7 +107,7 @@ void runtime_init()
     table_entry_t* ptr = __table_table;
     while (ptr->base_addr)
     {
-        map(ptr->base_addr, ptr->size);
+        map(ptr->base_addr, ptr->pages * 0x1000);
         ptr++;
     }
 }

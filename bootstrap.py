@@ -626,11 +626,14 @@ def finalize(emit):
     emit("section '.data' writeable")
     emit(f'__vars: rq {VAR_COUNT}')
 
+    # 1 << 12 = 4096
+    PAGE_BITS = 12
+
     #table table
     emit("__table_table:")
     for table in tables.values():
         outer_size = table.outer_size()
-        pages = (outer_size & 4096) + 1
+        pages = (((outer_size - 1) >> PAGE_BITS) + 1)
 
         emit(f"dq {hex(table.vaddr)}")
         emit(f"dq {outer_size}")
