@@ -489,6 +489,9 @@ class AstStruct:
 
             return cls(name, count)
 
+        def size(self):
+            return self.count * WORD_SIZE
+
     head   : Field
     fields : list[Field]
 
@@ -510,7 +513,7 @@ class AstStruct:
 
     def inner_size(self):
         return sum(
-            field.count
+            field.size()
             for field 
             in self.fields
         )
@@ -523,7 +526,7 @@ class AstStruct:
         for field in self.fields:
             if field.name == name:
                 break
-            offset += field.count
+            offset += field.size()
 
         return offset
 

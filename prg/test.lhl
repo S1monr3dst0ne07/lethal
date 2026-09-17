@@ -22,15 +22,13 @@ fn compute_all()
     lab loop;
         compute_entry(index);
 
-        printh(index);
+        printd(index);
         index = index + 1;
-    jump loop ~ index < 1000;
+    jump loop ~ index < 5000;
 }
 
 fn main()
 {
-    //compute_all();
-
-    printd(4096);
+    compute_all();
 }
 
