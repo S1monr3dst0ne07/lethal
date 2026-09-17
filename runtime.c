@@ -47,7 +47,7 @@ void map(void* addr, size_t length)
 {
     syscall(__NR_mmap, 
         addr, 
-        0x1000,
+        length,
         PROT_READ | PROT_WRITE, 
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
         (uint64_t)0, (uint64_t)0
@@ -88,23 +88,26 @@ void register_handler()
 
 
 typedef struct {
-    void*    vaddr;
-    uint64_t inner_size;
-    uint64_t outer_size;
-    uint64_t count;
-} entry_t;
+    void*    base_addr;
+    uint64_t size; 
 
-extern entry_t __struct_table[];
+    // mutable as program runs.
+    // number of contiguous pages
+    // in which table lives.
+    uint64_t pages;
+} table_entry_t;
+
+extern table_entry_t __table_table[];
 
 
 void runtime_init()
 {
     register_handler();
 
-    entry_t* ptr = __struct_table;
-    while (ptr->vaddr)
+    table_entry_t* ptr = __table_table;
+    while (ptr->base_addr)
     {
-        map(ptr->vaddr, ptr->outer_size);
+        map(ptr->base_addr, ptr->size);
         ptr++;
     }
 }
@@ -112,8 +115,12 @@ void runtime_init()
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
-    void* addr = info->si_addr;
+    void* ptr_addr = info->si_addr;
     struct ucontext* ctx = ucontext;
+
+    // the compiler makes sure of this!
+    uint64_t base_addr = ctx->uc_mcontext.rbx;
+
 }
 
 

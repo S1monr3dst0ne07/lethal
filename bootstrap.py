@@ -132,12 +132,12 @@ class AstLeaf:
                 stream.expect(')')
                 return cls((name, params), 'call')
 
-            case struct if stream.peek() == '[': #]
+            case table if stream.peek() == '[': #]
                 stream.expect('[') #]
                 index = AstExpr.parse(stream)
                 stream.expect(']')
                 field = stream.pop()
-                return cls((struct, index, field), 'access')
+                return cls((table, index, field), 'access')
 
             case string if '"' in string: return cls(string.strip('"'), 'string')
             case number if number.isdigit(): return cls(number, 'lit')
@@ -196,6 +196,21 @@ class AstLeaf:
                 strings[label] = self.value
                 emit(f'mov rax, {label}')
 
+            case 'access':
+                table_name, index, field = self.value
+                table = tables[table_name]
+
+                offset = table.field_offset(field)
+                inner_size = table.inner_size()
+                if offset == inner_size: 
+                    print(f"Error: Trying to load field `{field}` of table `{table_name}`, but it does not exist")
+                    sys.exit(1)
+
+                # rbx -> table base pointer
+                index.load(emit, scope)
+                emit(f"mov rbx, {hex(table.vaddr)}")
+                emit(f"mov rax, [rax*{inner_size} + {offset} + rbx]")
+
 
     def store(self, emit, scope): #store from rax
         self._resolve(scope, store=True)
@@ -205,19 +220,21 @@ class AstLeaf:
             emit(f'mov [__vars + {scope[self.value]}], rax')
 
         elif self.kind == 'access':
-            struct_name, index, field = self.value
-            struct = structs[struct_name]
+            table_name, index, field = self.value
+            table = tables[table_name]
 
-            offset = struct.field_offset(field)
-            inner_size = struct.inner_size()
+            offset = table.field_offset(field)
+            inner_size = table.inner_size()
             if offset == inner_size: 
-                print(f"Error: Trying to store into field `{field}` of struct `{struct_name}`, but it does not exist")
+                print(f"Error: Trying to store into field `{field}` of table `{table_name}`, but it does not exist")
                 sys.exit(1)
 
-            emit("push rax")
+            # r10 -> value to be stored
+            # rbx -> table base pointer
+            emit("mov r10, rax") 
             index.load(emit, scope)
-            emit(f"mov rbx, {hex(struct.vaddr)}")
-            emit(f"pop qword [rax*{inner_size} + {offset} + rbx]")
+            emit(f"mov rbx, {hex(table.vaddr)}")
+            emit(f"mov [rax*{inner_size} + {offset} + rbx], r10")
 
         else:
             print(f"Error: Trying to store into non-writable lvalue (kind={self.kind})")
@@ -471,7 +488,7 @@ class AstFnDef:
 using = set()
 
 @dc
-class AstStruct:
+class AstTable:
     @dc
     class Field:
         name  : str
@@ -500,7 +517,7 @@ class AstStruct:
 
     @classmethod
     def parse(cls, stream):
-        stream.expect('struct')
+        stream.expect('table')
         head = cls.Field.parse(stream)
 
         fields = []
@@ -536,10 +553,10 @@ class AstStruct:
 
 
 fns : list[AstFnDef] = []
-structs : dict[str, AstStruct] = {}
+tables : dict[str, AstTable] = {}
 
 def parse_prog(path):
-    global fns, structs
+    global fns, tables
     stream = tokenize(path)
 
     fns = []
@@ -548,9 +565,9 @@ def parse_prog(path):
             case 'fn':
                 fns.append(AstFnDef.parse(stream))
 
-            case 'struct':
-                struct = AstStruct.parse(stream)
-                structs[struct.head.name] = struct
+            case 'table':
+                table = AstTable.parse(stream)
+                tables[table.head.name] = table
 
             case 'use':
                 stream.expect('use')
@@ -568,10 +585,10 @@ def parse_prog(path):
 def compute_layout():
     # this assumes 48-bit vas
     VADDR_BASE = 1 << 46 # lower 47 bits are for rest of program (should be enough hehe)
-    VADDR_INTER = VADDR_BASE // len(structs) 
+    VADDR_INTER = VADDR_BASE // len(tables) 
 
-    for index, struct in enumerate(structs.values()):
-        struct.vaddr = VADDR_BASE + (index * VADDR_INTER)
+    for index, table in enumerate(tables.values()):
+        table.vaddr = VADDR_BASE + (index * VADDR_INTER)
 
 def compile_prog(emit):
     for fn in fns:
@@ -585,7 +602,7 @@ def runtime(emit):
 
     emit("extrn runtime_init")
 
-    emit("public __struct_table")
+    emit("public __table_table")
     emit("public _start")
     emit("_start:")
 
@@ -609,13 +626,15 @@ def finalize(emit):
     emit("section '.data' writeable")
     emit(f'__vars: rq {VAR_COUNT}')
 
-    #structure table
-    emit("__struct_table:")
-    for struct in structs.values():
-        emit(f"dq {hex(struct.vaddr)}")
-        emit(f"dq {struct.inner_size()}")
-        emit(f"dq {struct.outer_size()}")
-        emit(f"dq {struct.head.count}")
+    #table table
+    emit("__table_table:")
+    for table in tables.values():
+        outer_size = table.outer_size()
+        pages = (outer_size & 4096) + 1
+
+        emit(f"dq {hex(table.vaddr)}")
+        emit(f"dq {outer_size}")
+        emit(f"dq {pages}")
     emit("dq 0")
 
     #emit strings
