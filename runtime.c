@@ -1,35 +1,77 @@
+#define _GNU_SOURCE
+#include <unistd.h>
+
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
 #include <stdint.h>
 #include <stddef.h>
+#include <stdarg.h>
+#include <signal.h>
 
-// https://filippo.io/linux-syscall-table/
-#define SYS_CLOBBERS "rcx","r11","memory"
-#define SYS_MMAP 9
-#define MAP_ANON 0x20
-#define MAP_PRIV 0x2
-#define MAP_FIXED_NOREPLACE 0x100000
-#define PROT_READ  0x1
-#define PROT_WRITE 0x2
-#define PROT (PROT_READ | PROT_WRITE)
+inline long syscall(long int kind,  ...)
+{
+    // literally the only reason this uses va
+    // is to shut up the type checker.
+    va_list args;
+    va_start(args, 6);
+
+    uint64_t p1 = va_arg(args, uint64_t);
+    uint64_t p2 = va_arg(args, uint64_t);
+    uint64_t p3 = va_arg(args, uint64_t);
+    uint64_t p4 = va_arg(args, uint64_t);
+    uint64_t p5 = va_arg(args, uint64_t);
+    uint64_t p6 = va_arg(args, uint64_t);
+    va_end(args);
+
+    register uint64_t r10 __asm__("r10") = p4;
+    register uint64_t r8  __asm__("r8")  = p5;
+    register uint64_t r9  __asm__("r9")  = p6;
+
+    uint64_t ret;
+    asm volatile (
+        "syscall"
+        : "=a"(ret)
+        : "a"(kind), "D"(p1), "S"(p2), "d"(p3), "r"(r10), "r"(r8), "r"(r9)
+        : "rcx", "r11", "memory"
+    );
+    return ret;
+}
+
 
 void simple_mmap(void* addr, size_t length)
 {
-    register uint64_t r10 __asm__("r10") = MAP_ANON | MAP_PRIV | MAP_FIXED_NOREPLACE;
-    register uint64_t r8  __asm__("r8")  = 0;
-    register uint64_t r9  __asm__("r9")  = 0;
-
-    asm volatile (
-        "syscall"
-        : :
-            "a"(SYS_MMAP), 
-            "D"(addr), 
-            "S"(length), 
-            "d"(PROT),
-            "r"(r10),  // flags = MAP_ANON
-            "r"(r8),   // fd    = 0 (does not apply for anon maps)
-            "r"(r9)    // pgoff = 0 (does not apply for anon maps)
-        : SYS_CLOBBERS
+    syscall(SYS_mmap, 
+        addr, 
+        length, 
+        PROT_READ | PROT_WRITE, 
+        MAP_ANON | MAP_PRIVATE | MAP_FIXED_NOREPLACE,
+        (uint64_t)0, (uint64_t)0
     );
 }
+
+
+void handler(int sig, siginfo_t *info, void *ucontext);
+void register_handler()
+{
+    register uint64_t r10 __asm__("r10") = sizeof(sigset_t);
+
+    struct sigaction sigact = {
+        .sa_sigaction = handler,
+        .sa_flags     = SA_SIGINFO,
+    };
+
+    syscall(SYS_rt_sigaction,
+        SIGSEGV,
+        &sigact,
+        NULL,
+        sizeof(sigset_t),
+        (uint64_t)0, (uint64_t)0
+    );
+
+}
+
 
 
 typedef struct {
@@ -44,8 +86,9 @@ extern entry_t struct_table[];
 
 void runtime_init()
 {
-    entry_t* ptr = struct_table;
+    register_handler();
 
+    entry_t* ptr = struct_table;
     while (ptr->vaddr)
     {
         simple_mmap(ptr->vaddr, ptr->outer_size);
@@ -53,5 +96,10 @@ void runtime_init()
     }
 }
 
+
+void handler(int sig, siginfo_t *info, void *ucontext)
+{
+
+}
 
 
