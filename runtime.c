@@ -1,16 +1,17 @@
 #define _GNU_SOURCE
-#include <unistd.h>
 
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/mman.h>
+
+#include <asm/signal.h>
+#include <asm/unistd.h>
+#include <asm/mman.h>
+#include <asm/siginfo.h>
+#include <asm/sigcontext.h>
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
-#include <signal.h>
 
-inline long syscall(long int kind,  ...)
+long syscall(long int kind,  ...)
 {
     // literally the only reason this uses va
     // is to shut up the type checker.
@@ -42,13 +43,18 @@ inline long syscall(long int kind,  ...)
 
 void map(void* addr, size_t length)
 {
-    syscall(SYS_mmap, 
+    syscall(__NR_mmap, 
         addr, 
         length, 
         PROT_READ | PROT_WRITE, 
-        MAP_ANON | MAP_PRIVATE | MAP_FIXED_NOREPLACE,
+        MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
         (uint64_t)0, (uint64_t)0
     );
+}
+
+void evil_signal_restore()
+{
+    syscall(__NR_rt_sigreturn);
 }
 
 
@@ -62,12 +68,12 @@ void register_handler()
         unsigned long mask;
     } sigact = {
         .handler  = handler,
-        .flags    = SA_SIGINFO,
+        .flags    = SA_SIGINFO | SA_RESTORER,
         .mask     = 0,
-        .restorer = NULL
+        .restorer = evil_signal_restore,
     };
 
-    syscall(SYS_rt_sigaction,
+    syscall(__NR_rt_sigaction,
         SIGSEGV,
         &sigact,
         NULL,
@@ -86,14 +92,14 @@ typedef struct {
     uint64_t count;
 } entry_t;
 
-extern entry_t struct_table[];
+extern entry_t __struct_table[];
 
 
 void runtime_init()
 {
     register_handler();
 
-    entry_t* ptr = struct_table;
+    entry_t* ptr = __struct_table;
     while (ptr->vaddr)
     {
         map(ptr->vaddr, ptr->outer_size);
@@ -104,7 +110,6 @@ void runtime_init()
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
-
 }
 
 

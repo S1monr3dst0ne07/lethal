@@ -171,7 +171,7 @@ class AstLeaf:
             case 'lit':   emit(f'mov rax, {self.value}')
             case 'char':  emit(f'mov rax, {ord(self.value)}')
             case 'const': emit(f'mov rax, {consts[self.value]}')
-            case 'var':   emit(f'mov rax, [vars + {scope[self.value]}]')
+            case 'var':   emit(f'mov rax, [__vars + {scope[self.value]}]')
             case 'call':
                 name, params = self.value
                 scope.save(emit)
@@ -202,7 +202,7 @@ class AstLeaf:
 
         if self.kind == 'var':
             scope.alloc(self.value)
-            emit(f'mov [vars + {scope[self.value]}], rax')
+            emit(f'mov [__vars + {scope[self.value]}], rax')
 
         elif self.kind == 'access':
             struct_name, index, field = self.value
@@ -441,13 +441,13 @@ class AstFnDef:
         def save(self, emit):
             for vaddr in range(self.allocer):
                 addr = vaddr * WORD_SIZE
-                emit(f'push qword [vars + {addr}]')
+                emit(f'push qword [__vars + {addr}]')
 
         def restore(self, emit):
             for neg_vaddr in range(self.allocer):
                 vaddr = (self.allocer - 1) - neg_vaddr 
                 addr = vaddr * WORD_SIZE
-                emit(f'pop qword [vars + {addr}]')
+                emit(f'pop qword [__vars + {addr}]')
 
         def render_label(self, name):
             return f"__local_{self.fn_name}_{name}"
@@ -461,7 +461,7 @@ class AstFnDef:
         regs = ABI[:len(self.params)]
         for param, reg in zip(self.params, regs):
             scope.alloc(param)
-            emit(f'mov [vars + {scope[param]}], {reg}')
+            emit(f'mov [__vars + {scope[param]}], {reg}')
 
         self.body.compile(emit, scope)
         emit("xor rax, rax") # return null by default
@@ -585,7 +585,7 @@ def runtime(emit):
 
     emit("extrn runtime_init")
 
-    emit("public struct_table")
+    emit("public __struct_table")
     emit("public _start")
     emit("_start:")
 
@@ -607,10 +607,10 @@ def finalize(emit):
     #basic buffers
     VAR_COUNT = 100 # concurrent local variables
     emit("section '.data' writeable")
-    emit(f'vars: rq {VAR_COUNT}')
+    emit(f'__vars: rq {VAR_COUNT}')
 
     #structure table
-    emit("struct_table:")
+    emit("__struct_table:")
     for struct in structs.values():
         emit(f"dq {hex(struct.vaddr)}")
         emit(f"dq {struct.inner_size()}")
