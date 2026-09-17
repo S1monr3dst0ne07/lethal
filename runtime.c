@@ -4,8 +4,10 @@
 #include <asm/signal.h>
 #include <asm/unistd.h>
 #include <asm/mman.h>
+#include <linux/mman.h>
 #include <asm/siginfo.h>
 #include <asm/sigcontext.h>
+#include <asm/ucontext.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -45,9 +47,9 @@ void map(void* addr, size_t length)
 {
     syscall(__NR_mmap, 
         addr, 
-        length, 
+        0x1000,
         PROT_READ | PROT_WRITE, 
-        MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
         (uint64_t)0, (uint64_t)0
     );
 }
@@ -110,6 +112,8 @@ void runtime_init()
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
+    void* addr = info->si_addr;
+    struct ucontext* ctx = ucontext;
 }
 
 
