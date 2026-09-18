@@ -208,8 +208,10 @@ class AstLeaf:
 
                 # rbx -> table base pointer
                 index.load(emit, scope)
+                emit(f"mov r8, {inner_size}")
+                emit(f"mul r8") #this is horribily inefficient, i know
                 emit(f"mov rbx, {hex(table.vaddr)}")
-                emit(f"mov rax, [rax*{inner_size} + {offset} + rbx]")
+                emit(f"mov rax, [rax + rbx + {offset}]")
 
 
     def store(self, emit, scope): #store from rax
@@ -233,8 +235,10 @@ class AstLeaf:
             # rbx -> table base pointer
             emit("mov r10, rax") 
             index.load(emit, scope)
+            emit(f"mov r8, {inner_size}")
+            emit(f"mul r8") #this is horribily inefficient, i know
             emit(f"mov rbx, {hex(table.vaddr)}")
-            emit(f"mov [rax*{inner_size} + {offset} + rbx], r10")
+            emit(f"mov [rax + rbx + {offset}], r10")
 
         else:
             print(f"Error: Trying to store into non-writable lvalue (kind={self.kind})")
