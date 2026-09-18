@@ -155,9 +155,15 @@ void runtime_init()
 void* find_table(void* base_addr)
 {
     table_entry_t* ptr = __table_table;
-    for (; ptr; ptr++)
-        if (ptr->base_addr == base_addr)
-            return ptr;
+
+    if (ptr[0].base_addr == NULL)
+        return NULL;
+
+    for (; ptr[1].base_addr; ptr++)
+        if (ptr[0].base_addr < base_addr && 
+            ptr[1].base_addr > base_addr) return ptr;
+
+    return ptr;
 }
 
 
@@ -167,21 +173,17 @@ void* find_table(void* base_addr)
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
-    // the compiler makes sure of this!
-    struct ucontext* ctx = ucontext;
-    void* base_addr = (void*)ctx->uc_mcontext.rbx;
-    table_entry_t* table = find_table(base_addr);
-
     void* pointer = info->si_addr;
-    assert(pointer >= base_addr, "access into table at negative index.");
+    table_entry_t* table = find_table(pointer);
+    assert(table != NULL, "sigsegv but no tables. this is most likely caused a rogue pointer segv.");
 
     size_t old_page_count = table->page_count;
-    size_t new_page_count = PAGE_COUNT(pointer - base_addr);
+    size_t new_page_count = PAGE_COUNT(pointer - table->base_addr);
     size_t dif_page_count = new_page_count - old_page_count;
     assert(dif_page_count <= PAGE_COUNT_LIMIT, "page count limit exceeded. this is most likely caused a rogue pointer segv.");
 
     map(
-        (old_page_count * PAGE_SIZE) + base_addr,
+        (old_page_count * PAGE_SIZE) + table->base_addr,
         (dif_page_count * PAGE_SIZE)
     );
 
