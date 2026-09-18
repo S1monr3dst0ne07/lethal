@@ -136,8 +136,7 @@ class AstLeaf:
                 stream.expect('[') #]
                 index = AstExpr.parse(stream)
                 stream.expect(']')
-                field = stream.pop()
-                return cls((table, index, field), 'access')
+                return cls((table, index), 'row_access')
 
             case string if '"' in string: return cls(string.strip('"'), 'string')
             case number if number.isdigit(): return cls(number, 'lit')
@@ -163,7 +162,6 @@ class AstLeaf:
             case x:
                 print(f"Unsupported compiler-time leaf: `{x}`")
                 exit(1)
-
 
     def load(self, emit, scope): #load into rax
         self._resolve(scope)
@@ -196,22 +194,15 @@ class AstLeaf:
                 strings[label] = self.value
                 emit(f'mov rax, {label}')
 
-            case 'access':
-                table_name, index, field = self.value
+            case 'row_access':
+                table_name, index = self.value
                 table = tables[table_name]
 
-                offset = table.field_offset(field)
-                inner_size = table.inner_size()
-                if offset == inner_size: 
-                    print(f"Error: Trying to load field `{field}` of table `{table_name}`, but it does not exist")
-                    sys.exit(1)
-
-                # rbx -> table base pointer
                 index.load(emit, scope)
-                emit(f"mov r8, {inner_size}")
-                emit(f"mul r8") #this is horribily inefficient, i know
-                emit(f"mov rbx, {hex(table.vaddr)}")
-                emit(f"mov rax, [rax + rbx + {offset}]")
+                emit(f"mov rbx, {table.inner_size}")
+                emit(f"mul rbx") #this is horribily inefficient, i know
+                emit(f"mov rbx, {table.vaddr}")
+                emit(f"add rax, rbx")
 
 
     def store(self, emit, scope): #store from rax
@@ -220,25 +211,6 @@ class AstLeaf:
         if self.kind == 'var':
             scope.alloc(self.value)
             emit(f'mov [__vars + {scope[self.value]}], rax')
-
-        elif self.kind == 'access':
-            table_name, index, field = self.value
-            table = tables[table_name]
-
-            offset = table.field_offset(field)
-            inner_size = table.inner_size()
-            if offset == inner_size: 
-                print(f"Error: Trying to store into field `{field}` of table `{table_name}`, but it does not exist")
-                sys.exit(1)
-
-            # r10 -> value to be stored
-            # rbx -> table base pointer
-            emit("mov r10, rax") 
-            index.load(emit, scope)
-            emit(f"mov r8, {inner_size}")
-            emit(f"mul r8") #this is horribily inefficient, i know
-            emit(f"mov rbx, {hex(table.vaddr)}")
-            emit(f"mov [rax + rbx + {offset}], r10")
 
         else:
             print(f"Error: Trying to store into non-writable lvalue (kind={self.kind})")
@@ -249,15 +221,13 @@ class AstLeaf:
 
 
 
-OPS = ('+', '-', '==', '!=', '<', '>', '*', '/', '&', '|', '^', '<<', '>>') 
+OPS = ('+', '-', '==', '!=', '<', '>', '*', '/', '&', '|', '^', '<<', '>>', ':') 
 
 @dc
 class AstExpr:
     left  : "AstExpr | AstLeaf"
     right : "AstExpr | AstLeaf"
     op    : str
-
-    debug_src_token : ""
 
     @classmethod
     def parse(cls, stream):
@@ -268,7 +238,7 @@ class AstExpr:
 
         op = stream._pop()
         right = AstExpr.parse(stream)
-        return cls(left, right, op.content, op)
+        return cls(left, right, op.content)
 
     def load(self, emit, scope):
         self.right.load(emit, scope)
@@ -301,9 +271,23 @@ class AstExpr:
                 emit('mov rcx, rbx')
                 emit('shl rax, cl')
 
+            case ':':
+                emit("mov rax, [rax + rbx*8]")
+
+
     def store(self, emit, scope):
-        print(f"Error: Trying to store into `{self.op}`-operator expression")
-        sys.exit(1)
+        if self.op != ':':
+            print(f"Error: Trying to store into `{self.op}`-operator expression")
+            sys.exit(1)
+
+        emit("mov r10, rax")
+
+        self.right.load(emit, scope)
+        emit('push rax')
+        self.left.load(emit, scope)
+        emit('pop rbx')
+
+        emit("mov [rax + rbx*8], r10")
 
 
 
@@ -498,6 +482,8 @@ class AstTable:
         name  : str
         count : int
 
+        offset : int = 0
+
         @classmethod
         def parse(cls, stream):
             name = stream.pop()
@@ -510,11 +496,19 @@ class AstTable:
 
             return cls(name, count)
 
+        def alloc(self, iter):
+            self.offset = iter
+            consts[self.name] = self.offset
+            return iter + self.size()
+
         def size(self):
             return self.count * WORD_SIZE
 
     head   : Field
     fields : list[Field]
+
+    inner_size : int
+    outer_size : int
 
     # caution: big number!
     vaddr : int = None
@@ -530,30 +524,16 @@ class AstTable:
             fields.append(cls.Field.parse(stream))
         stream.expect('}')
 
-        return cls(head, fields)
+        # compute offsets
+        iter = 0
+        for field in fields:
+            iter = field.alloc(iter)
 
-    def inner_size(self):
-        return sum(
-            field.size()
-            for field 
-            in self.fields
-        )
+        inner_size = iter
+        outer_size = inner_size * head.count
 
-    def outer_size(self):
-        return self.inner_size() * self.head.count
+        return cls(head, fields, inner_size, outer_size)
 
-    def field_offset(self, name):
-        offset = 0
-        for field in self.fields:
-            if field.name == name:
-                break
-            offset += field.size()
-
-        return offset
-
-
-
-        
 
 
 fns : list[AstFnDef] = []
@@ -644,7 +624,7 @@ def finalize(emit):
         emit_table_table_entry(
             emit,
             table.vaddr, 
-            table.outer_size()
+            table.outer_size
         )
 
     emit("dq 0")
