@@ -54,9 +54,14 @@ void map(void* addr, size_t length)
     );
 }
 
+__attribute__((naked))
 void evil_signal_restore()
 {
-    syscall(__NR_rt_sigreturn);
+    asm volatile (
+        "mov rax, %0\n"
+        "syscall\n"
+         :: "i"(__NR_rt_sigreturn) : "rax" 
+    );
 }
 
 
@@ -70,7 +75,7 @@ void register_handler()
         unsigned long mask;
     } sigact = {
         .handler  = handler,
-        .flags    = SA_SIGINFO | SA_RESTORER,
+        .flags    = SA_SIGINFO | SA_RESTORER | SA_RESTART,
         .mask     = 0,
         .restorer = evil_signal_restore,
     };
@@ -99,6 +104,7 @@ typedef struct {
 
 extern table_entry_t __table_table[];
 
+#define PAGE_SIZE 0x1000
 
 void runtime_init()
 {
@@ -107,20 +113,31 @@ void runtime_init()
     table_entry_t* ptr = __table_table;
     while (ptr->base_addr)
     {
-        map(ptr->base_addr, ptr->pages * 0x1000);
+        map(ptr->base_addr, ptr->pages * PAGE_SIZE);
         ptr++;
     }
 }
 
+void* find_table(void* base_addr)
+{
+    table_entry_t* ptr = __table_table;
+    for (; ptr; ptr++)
+        if (ptr->base_addr == base_addr)
+            return ptr;
+}
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
-    void* ptr_addr = info->si_addr;
+    //void* ptr_addr = info->si_addr;
     struct ucontext* ctx = ucontext;
 
     // the compiler makes sure of this!
-    uint64_t base_addr = ctx->uc_mcontext.rbx;
+    //void* base_addr = (void*)ctx->uc_mcontext.rbx;
 
+    //table_entry_t* table = find_table(base_addr);
+    //void* after_addr = table->base_addr + table->pages * PAGE_SIZE;
+
+    //map(after_addr, ptr_addr - after_addr);
 }
 
 
