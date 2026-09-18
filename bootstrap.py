@@ -272,7 +272,7 @@ class AstExpr:
                 emit('shl rax, cl')
 
             case ':':
-                emit("mov rax, [rax + rbx*8]")
+                emit("mov rax, [rax + rbx]")
 
 
     def store(self, emit, scope):
@@ -287,7 +287,7 @@ class AstExpr:
         self.left.load(emit, scope)
         emit('pop rbx')
 
-        emit("mov [rax + rbx*8], r10")
+        emit("mov [rax + rbx], r10")
 
 
 
@@ -522,6 +522,7 @@ class AstTable:
         stream.expect('{') #}
         while stream.peek() != '}': #}
             fields.append(cls.Field.parse(stream))
+            if stream.peek() == ',': stream.pop()
         stream.expect('}')
 
         # compute offsets
