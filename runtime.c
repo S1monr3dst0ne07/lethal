@@ -13,6 +13,8 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+#define STDOUT 1
+
 long syscall(long int kind,  ...)
 {
     // literally the only reason this uses va
@@ -90,21 +92,43 @@ void register_handler()
 
 }
 
+#define CONFIG_DO_ASSERT
+
+void print(const char* str)
+{
+    uint64_t i = 0; while (str[i++]);
+    syscall(__NR_write, STDOUT, str, i);
+}
+void fail(const char* str)
+{
+    print(str);
+    syscall(__NR_exit, 1);
+}
+
+#ifdef CONFIG_DO_ASSERT
+#define assert(expr, msg) ((expr) ? (void)0 : fail("runtime error: " msg "\n"))
+#else 
+#define assert()
+#endif
 
 
-typedef struct {
+typedef struct 
+{
+    // initial table info, comming from compiler.
+    // both are immutable.
     void*    base_addr;
-    uint64_t size; 
+    uint64_t compile_size; 
+    
+    // runtime metadata.
+    uint64_t page_count;
 
-    // mutable as program runs.
-    // number of contiguous pages
-    // in which table lives.
-    uint64_t pages;
 } table_entry_t;
 
 extern table_entry_t __table_table[];
 
-#define PAGE_SIZE 0x1000
+#define PAGE_BITS 12
+#define PAGE_SIZE (1 << PAGE_BITS) // 0x1000
+#define PAGE_COUNT(x) (((x) >> PAGE_BITS) + 1)
 
 void runtime_init()
 {
@@ -113,7 +137,17 @@ void runtime_init()
     table_entry_t* ptr = __table_table;
     while (ptr->base_addr)
     {
-        map(ptr->base_addr, ptr->pages * PAGE_SIZE);
+        if (ptr->compile_size == 0)
+        {
+            print("warning: empty table!");
+            continue;
+        }
+
+        // if not page count is present, precompute it
+        if (ptr->page_count == 0)
+            ptr->page_count = PAGE_COUNT(ptr->compile_size - 1);
+
+        map(ptr->base_addr, ptr->page_count * PAGE_SIZE);
         ptr++;
     }
 }
@@ -126,18 +160,32 @@ void* find_table(void* base_addr)
             return ptr;
 }
 
+
+// no more than a 1000 pages at a time.
+// 1000 * 0x1000 =~ 1 meg
+#define PAGE_COUNT_LIMIT 1000
+
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
-    //void* ptr_addr = info->si_addr;
-    struct ucontext* ctx = ucontext;
-
     // the compiler makes sure of this!
-    //void* base_addr = (void*)ctx->uc_mcontext.rbx;
+    struct ucontext* ctx = ucontext;
+    void* base_addr = (void*)ctx->uc_mcontext.rbx;
+    table_entry_t* table = find_table(base_addr);
 
-    //table_entry_t* table = find_table(base_addr);
-    //void* after_addr = table->base_addr + table->pages * PAGE_SIZE;
+    void* pointer = info->si_addr;
+    assert(pointer >= base_addr, "access into table at negative index.");
 
-    //map(after_addr, ptr_addr - after_addr);
+    size_t old_page_count = table->page_count;
+    size_t new_page_count = PAGE_COUNT(pointer - base_addr);
+    size_t dif_page_count = new_page_count - old_page_count;
+    assert(dif_page_count <= PAGE_COUNT_LIMIT, "page count limit exceeded. this is most likely caused a rogue pointer segv.");
+
+    map(
+        (old_page_count * PAGE_SIZE) + base_addr,
+        (dif_page_count * PAGE_SIZE)
+    );
+
+    table->page_count = new_page_count;
 }
 
 
