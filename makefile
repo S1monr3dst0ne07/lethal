@@ -13,6 +13,9 @@ build: runtime
 	ld build.o runtime.o -o main -z noexecstack
 
 runtime:
-	gcc -g -c runtime.c -o runtime.o -ffreestanding -Wno-varargs -O0
+	gcc -g -c runtime.c -o runtime.o  -O0 \
+		-masm=intel \
+		-ffreestanding \
+		-Wno-varargs 
 
 
