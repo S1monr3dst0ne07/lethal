@@ -269,7 +269,7 @@ class AstExpr:
                 emit('shl rax, cl')
 
             case ':':
-                emit("mov rax, [rax + rbx]")
+                emit("mov rax, [rax + rbx*8]")
 
 
     def store(self, emit, scope):
@@ -284,7 +284,7 @@ class AstExpr:
         self.left.load(emit, scope)
         emit('pop rbx')
 
-        emit("mov [rax + rbx], r10")
+        emit("mov [rax + rbx*8], r10")
 
 
 
@@ -493,11 +493,6 @@ class AstTable:
 
             return cls(name, count)
 
-        def alloc(self, iter):
-            self.offset = iter
-            consts[self.name] = self.offset
-            return iter + self.size()
-
         def size(self):
             return self.count * WORD_SIZE
 
@@ -525,7 +520,10 @@ class AstTable:
         # compute offsets
         iter = 0
         for field in fields:
-            iter = field.alloc(iter)
+            field.offset = iter
+            iter += field.size()
+
+            consts[f"{head.name}::{field.name}"] = field.offset
 
         inner_size = iter
         outer_size = inner_size * head.count
@@ -654,8 +652,8 @@ def finalize(emit):
         string = string.encode('utf-8').decode('unicode_escape')
         emit(f"{label}:")
         for char in string:
-            emit(f"\tdb {ord(char)}")
-        emit("\tdb 0")
+            emit(f"\tdq {ord(char)}")
+        emit("\tdq 0")
 
 
 def main():
