@@ -134,7 +134,7 @@ class AstLeaf:
 
             case table if stream.peek() == '[': #]
                 stream.expect('[') #]
-                index = AstExpr.parse(stream)
+                index = None if stream.peek() == ']' else AstExpr.parse(stream)
                 stream.expect(']')
                 return cls((table, index), 'row_access')
 
@@ -152,16 +152,12 @@ class AstLeaf:
             print(f"Error: Unable to resolve leaf: `{self.value}`")
             sys.exit(1)
 
-    def eval(self, scope):
-        self._resolve(scope)
-        match self.kind:
-            case 'lit':   return self.value
-            case 'char':  return ord(self.value)
-            case 'const': return consts[self.value]
+    def eval(self):
+        if self.kind  == 'lit' : return int(self.value)
+        if self.value in consts: return consts[self.value]
 
-            case x:
-                print(f"Unsupported compiler-time leaf: `{x}`")
-                exit(1)
+        print(f"Unsupported compiler-time leaf: `{x}`")
+        exit(1)
 
     def load(self, emit, scope): #load into rax
         self._resolve(scope)
@@ -185,7 +181,7 @@ class AstLeaf:
                 if name == 'syscall':
                     emit('syscall')
                 else:
-                    emit(f"call {name.replace(':', '_')}")
+                    emit(f"call {name}")
 
                 scope.restore(emit)
 
@@ -198,7 +194,8 @@ class AstLeaf:
                 table_name, index = self.value
                 table = tables[table_name]
 
-                index.load(emit, scope)
+                if index: index.load(emit, scope)
+                else:     emit("mov rax, 0")
                 emit(f"mov rbx, {table.inner_size}")
                 emit(f"mul rbx") #this is horribily inefficient, i know
                 emit(f"mov rbx, {table.vaddr}")
@@ -491,7 +488,7 @@ class AstTable:
 
             if stream.peek() == '[': #]
                 stream.expect('[') #]
-                count = int(stream.pop())
+                count = AstExpr.parse(stream).eval()
                 stream.expect(']')
 
             return cls(name, count)
@@ -540,11 +537,30 @@ class AstTable:
 fns : list[AstFnDef] = []
 tables : dict[str, AstTable] = {}
 
+iota = 0
+
+def parse_const(stream):
+    global iota
+
+    stream.expect('const')    
+    name = stream.pop()
+    stream.expect('=')
+    value = stream.pop()
+
+    match value:
+        case 'iota':
+            consts[name] = iota
+            iota += 1
+        case 'alpha':
+            iota = 0
+            consts[name] = iota
+        case _:
+            consts[name] = int(value)
+
 def parse_prog(path):
     global fns, tables
     stream = tokenize(path)
 
-    fns = []
     while stream.has():
         match stream.peek():
             case 'fn':
@@ -562,6 +578,9 @@ def parse_prog(path):
                     using.add(path)
                     print(f'import: {path}')
                     parse_prog(path)
+
+            case 'const':
+                parse_const(stream)
 
             case x: 
                 print(f"Error: Invalid toplevel prefix: {x}")
