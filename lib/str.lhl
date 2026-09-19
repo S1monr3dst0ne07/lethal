@@ -39,32 +39,28 @@ fn prints(str)
 
 fn strqtob(str)
 {
-    qi = 0;
-    bi = 0;
+    i = 0;
 
     lab loop;
-        char = str : qi;
-        (str + bi) : 0 = char;
+        char = str : i;
+        (str + i) : 0 = char;
         jump done ~ char == '\0';
 
-        qi = qi + 1;
-        bi = bi + 1;
+        i = i + 1;
         jump loop;
     lab done;
 }
 
-fn strbtoq(str)
+fn strnbtoq(str, null_index)
 {
-    qi = 0;
-    bi = 0;
+    i = null_index;
 
     lab loop;
-        char = str : qi;
-        (str + bi) : 0 = char;
-        jump done ~ char == '\0';
+        char = (str + i) : 0;
+        str : i = char;
+        jump done ~ i == 0;
 
-        qi = qi + 1;
-        bi = bi + 1;
+        i = i - 1;
         jump loop;
     lab done;
 }
