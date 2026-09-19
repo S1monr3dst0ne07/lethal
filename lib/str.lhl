@@ -1,0 +1,71 @@
+
+fn printc(ptr)
+{
+    syscall(1, 1, ptr, 1);
+}
+
+
+fn isdigit(char)
+{
+    return (('0' - 1) < char) & (('9' + 1) > char);
+}
+
+
+fn strdiff(yin, yang)
+{
+    i = 0;
+    lab loop;
+        jump done ~ (yin : i) != (yang : i);
+        jump done ~ (yin : i) == 0;
+
+        i = i + 1;
+        jump loop;
+    lab done;
+
+    return ((yin : i) - (yang : i));
+}
+
+
+fn prints(str)
+{
+    i = 0;
+    lab loop;
+        printc(str + (i*8));
+        i = i + 1;
+    jump loop ~ str : i;
+}
+
+
+
+fn strqtob(str)
+{
+    qi = 0;
+    bi = 0;
+
+    lab loop;
+        char = str : qi;
+        (str + bi) : 0 = char;
+        jump done ~ char == '\0';
+
+        qi = qi + 1;
+        bi = bi + 1;
+        jump loop;
+    lab done;
+}
+
+fn strbtoq(str)
+{
+    qi = 0;
+    bi = 0;
+
+    lab loop;
+        char = str : qi;
+        (str + bi) : 0 = char;
+        jump done ~ char == '\0';
+
+        qi = qi + 1;
+        bi = bi + 1;
+        jump loop;
+    lab done;
+}
+

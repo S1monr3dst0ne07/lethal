@@ -2,16 +2,12 @@
 // core debugging library !!!
 // low-level stuff ahead
 
-
-fn outchar(ptr)
-{
-    syscall(1, 1, ptr, 1);
-}
+use "lib/str.lhl"
 
 fn printh(number)
 {
-    outchar("0");
-    outchar("x");
+    printc("0");
+    printc("x");
     
     table      = "0123456789abcdef";
     table_mask = 15;
@@ -25,11 +21,11 @@ fn printh(number)
         or = or | digit;
 
         jump zero_skip ~ or == 0;
-            outchar(table + digit);
+            printc(table + (digit * 8));
         lab zero_skip;
     jump loop ~ offset;
 
-    outchar("\n");
+    printc("\n");
 }
 
 fn printd(number)
@@ -50,11 +46,11 @@ fn printd(number)
         slider = slider / 10;
 
         jump zero_skip ~ or == 0;
-            outchar(table + digit);
+            printc(table + (digit * 8));
         lab zero_skip;
     jump loop ~ slider;
 
-    outchar("\n");
+    printc("\n");
     
 }
 
