@@ -1,9 +1,9 @@
 
-fn load_file(buffer, path)
+fn load_file(buffer, path, limit)
 {
     strqtob(path);
     fd = sys_open(path, 0); //RDONLY
-    nbytes = sys_read(fd, buffer, SOURCE_ROWS);
+    nbytes = sys_read(fd, buffer, limit);
     strnbtoq(buffer, nbytes);
     buffer : nbytes = '\0';
 }
