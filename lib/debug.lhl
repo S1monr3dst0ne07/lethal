@@ -2,7 +2,21 @@
 // core debugging library !!!
 // low-level stuff ahead
 
-use "lib/str.lhl"
+fn printc(ptr)
+{
+    syscall(1, 1, ptr, 1);
+}
+
+fn prints(str)
+{
+    i = 0;
+    lab loop;
+        printc(str + (i*8));
+        i = i + 1;
+    jump loop ~ str : i;
+}
+
+
 
 fn printh(number)
 {

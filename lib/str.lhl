@@ -1,8 +1,4 @@
 
-fn printc(ptr)
-{
-    syscall(1, 1, ptr, 1);
-}
 
 
 fn isdigit(char)
@@ -23,16 +19,6 @@ fn strdiff(yin, yang)
     lab done;
 
     return ((yin : i) - (yang : i));
-}
-
-
-fn prints(str)
-{
-    i = 0;
-    lab loop;
-        printc(str + (i*8));
-        i = i + 1;
-    jump loop ~ str : i;
 }
 
 
