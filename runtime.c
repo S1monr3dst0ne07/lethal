@@ -45,15 +45,38 @@ long syscall(long int kind,  ...)
 }
 
 
+
+#define CONFIG_DO_ASSERT
+
+void print(const char* str)
+{
+    uint64_t i = 0; while (str[i++]);
+    syscall(__NR_write, STDOUT, str, i);
+}
+void fail(const char* str)
+{
+    print(str);
+    syscall(__NR_exit, 1);
+}
+
+#ifdef CONFIG_DO_ASSERT
+#define assert(expr, msg) ((expr) ? (void)0 : fail("runtime error: " msg "\n"))
+#else 
+#define assert()
+#endif
+
+
+
 void map(void* addr, size_t length)
 {
-    syscall(__NR_mmap, 
+    uint64_t retval = syscall(__NR_mmap, 
         addr, 
         length,
         PROT_READ | PROT_WRITE, 
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
         (uint64_t)0, (uint64_t)0
     );
+    assert(retval >= 0, "mmap failed. system might be out of memory.")    ;
 }
 
 __attribute__((naked))
@@ -91,25 +114,6 @@ void register_handler()
     );
 
 }
-
-#define CONFIG_DO_ASSERT
-
-void print(const char* str)
-{
-    uint64_t i = 0; while (str[i++]);
-    syscall(__NR_write, STDOUT, str, i);
-}
-void fail(const char* str)
-{
-    print(str);
-    syscall(__NR_exit, 1);
-}
-
-#ifdef CONFIG_DO_ASSERT
-#define assert(expr, msg) ((expr) ? (void)0 : fail("runtime error: " msg "\n"))
-#else 
-#define assert()
-#endif
 
 
 typedef struct 
