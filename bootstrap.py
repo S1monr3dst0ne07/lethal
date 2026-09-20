@@ -138,6 +138,9 @@ class AstLeaf:
                 stream.expect(']')
                 return cls((table, index), 'row_access')
 
+            case '#':
+                return cls(stream.pop(), 'table_compile_size')
+
             case string if '"' in string: return cls(string.strip('"'), 'string')
             case number if number.isdigit(): return cls(number, 'lit')
             case x: return cls(x, 'meta') #resolve during compile
@@ -198,8 +201,12 @@ class AstLeaf:
                 else:     emit("mov rax, 0")
                 emit(f"mov rbx, {table.inner_size}")
                 emit(f"mul rbx") #this is horribily inefficient, i know
-                emit(f"mov rbx, {table.vaddr}")
+                emit(f"mov rbx, {table.base_addr}")
                 emit(f"add rax, rbx")
+
+            case 'table_compile_size':
+                emit(f'mov rax, {tables[self.value].outer_size}')
+
 
 
     def store(self, emit, scope): #store from rax
@@ -586,11 +593,13 @@ def parse_prog(path):
 
 def compute_layout():
     # this assumes 48-bit vas
-    VADDR_BASE = 1 << 46 # lower 47 bits are for rest of program (should be enough hehe)
+    VADDR_BASE  = 1 << 40 # lower 47 bits are for rest of program (should be enough hehe)
     VADDR_INTER = VADDR_BASE // len(tables) 
+    PAGE_SIZE   = 0x1000
 
     for index, table in enumerate(tables.values()):
-        table.vaddr = VADDR_BASE + (index * VADDR_INTER)
+        base_addr_unal  = VADDR_BASE + (index * VADDR_INTER)
+        table.base_addr = base_addr_unal & ~(PAGE_SIZE - 1)
 
 def compile_prog(emit):
     for fn in fns:
@@ -628,7 +637,7 @@ def emit_table_table_entry(emit, base_addr, compile_size):
     emit(f"dq {str(compile_size)}")
 
     # runtime data
-    emit(f"dq 0")
+    emit("dq 0")
 
 def finalize(emit):
     #basic buffers
@@ -641,7 +650,7 @@ def finalize(emit):
     for table in tables.values():
         emit_table_table_entry(
             emit,
-            table.vaddr, 
+            table.base_addr, 
             table.outer_size
         )
 
