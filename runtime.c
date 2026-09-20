@@ -177,6 +177,8 @@ void* find_table(void* base_addr)
 
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
+    assert(info->si_code != SI_KERNEL, "kernel segmentation fault.");
+
     void* pointer = info->si_addr;
     table_entry_t* table = find_table(pointer);
     assert(table != NULL, "sigsegv but no tables. this is most likely caused a rogue pointer segv.");
