@@ -1,0 +1,29 @@
+
+- pre/post inc/dec for indices
+
+
+
+- static language
+    - everything is stored as static buffer,
+        sparsly in vaddr surrounded by unmapped space.
+    - buffers are bounds check by paging
+    - once bounds violation occurs,
+        runtime grows buffer,
+        maybe profiles buffer sizes.
+    - flat objects only. buffer are like instantiated struct arrays.
+        all fields have to be words.
+        compound compile-time fields are allowed (for example for strings):
+            `field_name[255]`
+    - words only
+    
+    Buffers are flat, contiguous storage.
+    Their element/layout sizes are known where the language needs them to be known.
+    Buffers are allocated/reserved up front, with virtual space available for exceptional growth.
+    The programmer controls how the contents are interpreted, reused, and retained.
+
+
+
+
+
+
+
