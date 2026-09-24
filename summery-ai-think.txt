@@ -1,0 +1,21 @@
+# Language Design Summary
+1. The language is centered around **flat, statically laid-out buffers** rather than dynamically allocated objects.
+2. A buffer is fundamentally just a contiguous region of memory containing words or fixed-size elements.
+3. Buffers are allocated or reserved up front with a programmer-provided expected size, so ordinary execution does not require dynamic allocation.
+4. The underlying implementation can reserve a much larger virtual address range and map additional pages only when the original estimate is exceeded.
+5. Buffer growth is therefore an **exceptional page-fault-driven operation**, rather than something normal code checks on every access.
+6. Buffers grow only toward higher addresses, making their virtual-memory layout and fault handling easier to reason about.
+7. The language should remain minimalist and should not introduce special built-in categories such as `StringBuffer`, `TokenBuffer`, `ASTBuffer`, arenas, or other elaborate container types unless experience proves they are necessary.
+8. A string is therefore just some representation in ordinary buffer storage; fixed-size embedded strings are perfectly acceptable when a known maximum is sufficient.
+9. Similarly, compiler tokens can simply have a fixed maximum size, with unusually large tokens producing an explicit error rather than forcing general dynamic strings.
+10. Variable-sized or complicated structures can be represented using separate buffers and indices or pointers, rather than recursively embedding dynamic objects.
+11. Global buffers are useful for data whose contents remain relevant for the entire lifetime of the program, such as an AST or other compiler-wide tables.
+12. Temporary buffers can simply be reused by the programmer when their current contents are no longer needed, without requiring the language to track memory lifetimes.
+13. This means the language does not need a sophisticated ownership or lifetime system for buffers themselves; the buffers are persistent storage, while the programmer decides when their contents cease to matter.
+14. Pointers are still valuable because they provide a simple way to refer to arbitrary positions in buffers without repeatedly carrying an explicit `(buffer, index)` pair.
+15. The programmer should therefore be able to obtain ordinary memory addresses of buffer contents and pass them to C-like functions when useful.
+16. The language's safety/performance model comes primarily from controlled buffer layout and virtual-memory reservation, not from eliminating pointers or attempting to encode every relationship in the type system.
+17. Standard-library abstractions can eventually be built as ordinary functions operating on buffers and pointers, without requiring the memory model itself to understand their semantics.
+18. The compiler is a particularly good test case because its natural data flow consists of large flat tables and buffers: source text, tokens, AST nodes, IR, and generated code.
+19. The overall philosophy is to give the programmer a **small number of powerful memory primitives** and let higher-level data structures emerge as programming conventions rather than language-enforced abstractions.
+20. The central design principle is therefore: **make memory explicit, predictable, flat, and plentiful, while moving dynamic complexity out of the common path and leaving interpretation, reuse, and data lifetime largely to the programmer.**

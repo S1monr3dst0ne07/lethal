@@ -3,15 +3,14 @@ use "lib/debug.lhl"
 
 table entires[512]
 {
-    ent_padding,
     ent_number,
 }
 
 fn compute_entry(index)
 {
     entires[index] : ent_number = 
-        entires[index - 1] : ent_number +
-        entires[index - 2] : ent_number ;
+        (entires[index - 1] : ent_number) +
+        (entires[index - 2] : ent_number) ;
 }
 
 fn compute_all()
@@ -19,12 +18,16 @@ fn compute_all()
     entires[0] : ent_number = 1;
     entires[1] : ent_number = 1;
 
+
     index = 2;
     lab loop;
         compute_entry(index);
 
+        //printd(entires[index] : ent_number);
+
         index = index + 1;
-    jump loop ~ index < 600;
+    jump loop ~ index < 10000;
+
 }
 
 fn main()

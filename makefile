@@ -2,20 +2,14 @@
 .PHONY: build runtime run
 
 run: build
-	./main
+	./build
 
 trace:
-	strace ./main
+	strace ./build
 
-build: runtime
-	./bootstrap.py prg/test.lhl
-	fasm build.asm build.o
-	ld build.o runtime.o -o main -z noexecstack
-
-runtime:
-	gcc -g -c runtime.c -o runtime.o  -O0 \
-		-masm=intel \
-		-ffreestanding \
-		-Wno-varargs 
+build:
+	./bootstrap.py compiler.lhl
+	fasm -m 1000000 build.asm build 
+	chmod +x build
 
 

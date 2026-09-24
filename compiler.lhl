@@ -1,0 +1,186 @@
+
+
+use "lib/debug.lhl"
+use "lib/str.lhl"
+use "lib/bool.lhl"
+//use "lib/meta.lhl"
+
+
+fn sys_open(name, mode       ) { return syscall(2, name, 0, mode); }
+fn sys_read(fd, buffer, count) { return syscall(0, fd, buffer, count); }
+fn sys_close(fd)               { return syscall(3, fd); }
+
+
+
+
+const TT_NONE        = 0
+const TT_IDEN        = 1
+const TT_BLOCK_OPEN  = 2
+const TT_BLOCK_CLOSE = 3
+const TT_PAREN_OPEN  = 4
+const TT_PAREN_CLOSE = 5
+const TT_ARRAY_OPEN  = 6
+const TT_ARRAY_CLOSE = 7
+const TT_EOS         = 8
+const TT_DOUBLE_Q    = 9
+const TT_SINGLE_Q    = 10
+const TT_FORMAT      = 11
+const TT_SYMBOL      = 12
+
+
+
+
+fn get_token_type(char)
+{
+    // isalphanum(char)
+    jump iden ~ (('a' - 1) < char) & (('z' + 1) > char);
+    jump iden ~ (('A' - 1) < char) & (('Z' + 1) > char);
+    jump iden ~ isdigit(char);
+
+    jump iden ~ char == '_';
+    jump iden ~ char == ':';
+
+    jump block_open  ~ char == '{';
+    jump block_close ~ char == '}';
+
+    jump paren_open  ~ char == '(';
+    jump paren_close ~ char == ')';
+
+    jump array_open  ~ char == '[';
+    jump array_close ~ char == ']';
+
+    jump end_of_statement ~ char == ';';
+    jump double_quote     ~ char == 34; // double quote
+    jump single_quote     ~ char == 39; // single quote
+
+    jump format ~ char == 32;
+    jump format ~ char == '\n';
+    jump format ~ char == '\t';
+
+    jump symbol;
+    
+
+    lab iden;               return TT_IDEN;
+    lab block_open;         return TT_BLOCK_OPEN;
+    lab block_close;        return TT_BLOCK_CLOSE; 
+    lab paren_open;         return TT_PAREN_OPEN; 
+    lab paren_close;        return TT_PAREN_CLOSE; 
+    lab array_open;         return TT_ARRAY_OPEN;
+    lab array_close;        return TT_ARRAY_CLOSE;
+    lab end_of_statement;   return TT_EOS;
+    lab double_quote;       return TT_DOUBLE_Q;
+    lab single_quote;       return TT_SINGLE_Q;
+    lab format;             return TT_FORMAT;
+    lab symbol;             return TT_SYMBOL;
+    
+}
+
+
+
+
+table tokens[10000]
+{
+    content[30],
+}
+
+// TODO: fix this
+table read_buffer
+{ c }
+
+fn tokenize(path)
+{
+    state_comment = false;
+    state_string  = false;
+    state_char    = false;
+    lineno = 1;
+    last = TT_NONE;
+
+    cnt_i = 0;
+    tok_i = 0;
+
+    fd = sys_open(path, 0); //RDONLY
+
+    lab loop;
+        sys_read(fd, read_buffer[], 1);
+        char = read_buffer[] : 0;
+
+        jump done ~ char == '\0';
+        kind = get_token_type(char);
+
+
+        jump skip_newline ~ char != '\n';
+            lineno = lineno + 1;
+        lab skip_newline;
+
+        buffer = tokens[tok_i] : tokens::content;
+        state_comment = state_comment | ((strdiff(buffer, "//") == 0) & bool_not(state_string));
+        state_string  = state_string  ^ (last == TT_DOUBLE_Q);
+        state_char    = state_char    ^ (last == TT_SINGLE_Q);
+
+    
+
+        // state transition. or must trigger on symbol.
+        transition = (kind != last)
+                   | (last == TT_BLOCK_OPEN)
+                   | (last == TT_BLOCK_CLOSE)
+                   | (last == TT_PAREN_OPEN)
+                   | (last == TT_PAREN_CLOSE);
+
+        // can emit?
+        unlocked = bool_not(state_comment)
+                 & bool_not(state_string)
+                 & bool_not(state_char);
+
+        // can emit!
+        emit = transition & unlocked;
+
+
+        jump skip_emit ~ bool_not(emit);
+            jump skip_push ~ last == TT_NONE;
+            jump skip_push ~ last == TT_FORMAT;
+                tok_i = tok_i + 1;
+            lab skip_push;
+            buf_i = 0;
+        lab skip_emit;
+
+
+        jump skip_comment_end ~ char != '\n';
+        jump skip_comment_end ~ bool_not(state_comment);
+            buf_i = 0;
+            state_comment = false;
+            state_string  = false;
+            state_char    = false;
+        lab skip_comment_end;
+
+
+        jump skip_write ~ kind == TT_SINGLE_Q;
+        jump skip_write ~ kind == TT_DOUBLE_Q;
+            token = tokens[tok_i];
+            
+            token : (tokens::content + cnt_i) = char;
+            cnt_i = cnt_i + 1;
+            token : (tokens::content + cnt_i) = '\0';
+        lab skip_write;
+
+        last = kind;
+    jump loop;
+    lab done;
+
+    sys_close(fd);
+}
+
+
+fn main()
+{
+    tokenize("prg/test.lhl");
+
+    prints(tokens[0] + (tokens::content * 8));
+
+    //meta_list_table(tokens[]);
+
+}
+
+
+
+
+

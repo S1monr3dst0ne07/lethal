@@ -1,0 +1,37 @@
+
+
+
+table meta_table
+{
+    base_ptr, // mesa table base pointer
+    compile_size,
+}
+
+fn meta_lookup(ptr)
+{
+    index = 0; 
+    lab loop;
+        base_ptr = meta_table[index] : meta_table::base_ptr;
+        index = index + 1;
+
+        jump done ~ base_ptr == ptr;
+        jump done ~ base_ptr == 0;
+    jump loop;
+
+    lab done;
+    return index;
+}
+
+fn meta_outer_size(ptr)
+{
+    row = meta_lookup(ptr);
+    return row : meta_table::outer_size;
+}
+
+
+fn meta_list_table(ptr)
+{
+    row_count = ptr;
+    
+
+}

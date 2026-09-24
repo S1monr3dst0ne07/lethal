@@ -138,9 +138,6 @@ class AstLeaf:
                 stream.expect(']')
                 return cls((table, index), 'row_access')
 
-            case '#':
-                return cls(stream.pop(), 'table_compile_size')
-
             case string if '"' in string: return cls(string.strip('"'), 'string')
             case number if number.isdigit(): return cls(number, 'lit')
             case x: return cls(x, 'meta') #resolve during compile
@@ -201,12 +198,8 @@ class AstLeaf:
                 else:     emit("mov rax, 0")
                 emit(f"mov rbx, {table.inner_size}")
                 emit(f"mul rbx") #this is horribily inefficient, i know
-                emit(f"mov rbx, {table.base_addr}")
+                emit(f"mov rbx, {table.label}")
                 emit(f"add rax, rbx")
-
-            case 'table_compile_size':
-                emit(f'mov rax, {tables[self.value].outer_size}')
-
 
 
     def store(self, emit, scope): #store from rax
@@ -503,6 +496,8 @@ class AstTable:
         def size(self):
             return self.count * WORD_SIZE
 
+    label : str
+
     head   : Field
     fields : list[Field]
 
@@ -535,32 +530,21 @@ class AstTable:
         inner_size = iter
         outer_size = inner_size * head.count
 
-        return cls(head, fields, inner_size, outer_size)
+        return cls(next(fresh), head, fields, inner_size, outer_size)
 
 
 
 fns : list[AstFnDef] = []
 tables : dict[str, AstTable] = {}
 
-iota = 0
-
 def parse_const(stream):
-    global iota
 
     stream.expect('const')    
     name = stream.pop()
     stream.expect('=')
     value = stream.pop()
 
-    match value:
-        case 'iota':
-            consts[name] = iota
-            iota += 1
-        case 'alpha':
-            iota = 0
-            consts[name] = iota
-        case _:
-            consts[name] = int(value)
+    consts[name] = int(value)
 
 def parse_prog(path):
     global fns, tables
@@ -591,15 +575,6 @@ def parse_prog(path):
                 print(f"Error: Invalid toplevel prefix: {x}")
                 sys.exit(1)
 
-def compute_layout():
-    # this assumes 48-bit vas
-    VADDR_BASE  = 1 << 40 # lower 47 bits are for rest of program (should be enough hehe)
-    VADDR_INTER = VADDR_BASE // len(tables) 
-    PAGE_SIZE   = 0x1000
-
-    for index, table in enumerate(tables.values()):
-        base_addr_unal  = VADDR_BASE + (index * VADDR_INTER)
-        table.base_addr = base_addr_unal & ~(PAGE_SIZE - 1)
 
 def compile_prog(emit):
     for fn in fns:
@@ -608,16 +583,11 @@ def compile_prog(emit):
 
 def runtime(emit):
     # headers
-    emit('format ELF64')
-    emit("section '.text' executable")
+    emit('format ELF64 executable')
+    emit("segment executable")
 
-    emit("extrn runtime_init")
-
-    emit("public __table_table")
-    emit("public _start")
+    emit("entry _start")
     emit("_start:")
-
-    emit("call runtime_init")
 
     # process parameters 
     # system V abi, section 3.4 process init
@@ -632,29 +602,11 @@ def runtime(emit):
     emit("syscall")
 
 
-def emit_table_table_entry(emit, base_addr, compile_size):
-    emit(f"dq {hex(base_addr)}")
-    emit(f"dq {str(compile_size)}")
-
-    # runtime data
-    emit("dq 0")
-
 def finalize(emit):
     #basic buffers
     VAR_COUNT = 100 # concurrent local variables
-    emit("section '.data' writeable")
+    emit("segment writeable")
     emit(f'__vars: rq {VAR_COUNT}')
-
-    #table table
-    emit("__table_table:")
-    for table in tables.values():
-        emit_table_table_entry(
-            emit,
-            table.base_addr, 
-            table.outer_size
-        )
-
-    emit("dq 0")
 
     #emit strings
     for label, string in strings.items():
@@ -664,10 +616,16 @@ def finalize(emit):
             emit(f"\tdq {ord(char)}")
         emit("\tdq 0")
 
+    #emit tables
+    for table in tables.values():
+        emit(f"{table.label}:")
+        emit(f"\trq {table.outer_size}")
+        emit("\tdq 0")
+
+
 
 def main():
     parse_prog(sys.argv[1])
-    compute_layout()
 
     asm = []
     emitter = lambda x: asm.append(x)

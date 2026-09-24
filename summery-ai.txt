@@ -1,0 +1,21 @@
+# Language Design Summary
+1. The language is built around **flat, contiguous buffers** rather than objects, heaps, or dynamically sized containers.
+2. A buffer is fundamentally just a reserved region of memory containing elements with a known layout.
+3. Buffers are allocated with an initial size chosen by the programmer, based on an expected workload.
+4. The runtime can reserve a much larger virtual-address region so that a buffer can grow in place if the initial estimate is insufficient.
+5. Normal accesses therefore require no explicit bounds-checking machinery; growth is an exceptional path handled through virtual memory.
+6. Buffers are not inherently typed containers with special semantics—the same primitive can represent tokens, AST nodes, strings, tables, scratch space, or arbitrary data.
+7. The programmer decides how the contents of a buffer are interpreted and how much of it is currently meaningful.
+8. A buffer can contain fixed-size structures, and relationships between structures can be represented using indexes or addresses into other buffers.
+9. Variable-sized data does not need a special object model; it can either be given a fixed maximum size or stored separately in another buffer.
+10. Strings, for example, can simply be stored as ordinary character data, potentially using conventional null termination when convenient.
+11. The language should probably allow ordinary pointers to addresses within buffers rather than forcing every reference to carry explicit buffer identity.
+12. Pointers provide a convenient way to pass references to arbitrary pieces of buffer storage into generic functions and C-like routines.
+13. The language's memory model can still restrict or diagnose invalid accesses through its reserved-buffer and virtual-memory machinery.
+14. Buffers can be reused by the programmer simply by treating their existing contents as obsolete and writing new data over them.
+15. This means memory reclamation is generally not a language-level problem; the programmer decides when data is no longer relevant.
+16. Some buffers, such as an AST table, can simply persist for the entire lifetime of a compilation or program.
+17. Other buffers, such as token or scratch buffers, can be reused between processing stages when their previous contents are no longer needed.
+18. Generic functions therefore operate primarily by receiving pointers or buffer locations and writing their results into caller-provided storage rather than constructing and returning owned objects.
+19. The language deliberately trades some convenience and generality for predictable memory usage, simple runtime behavior, and the ability to reason directly about storage.
+20. The core philosophy is therefore **minimal primitives, explicit storage, flat data, ordinary pointers, compile-time-known layouts, and exceptional rather than routine dynamic growth**.
